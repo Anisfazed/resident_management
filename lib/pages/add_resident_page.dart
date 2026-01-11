@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../models/resident_model.dart';
 import '../models/household_model.dart';
-import '../myconfig.dart'; // Import your config file
+import '../myconfig.dart';
 
 class AddResidentPage extends StatefulWidget {
   final Resident? existingResident;
@@ -15,39 +15,42 @@ class AddResidentPage extends StatefulWidget {
 }
 
 class _AddResidentPageState extends State<AddResidentPage> {
-  // ... (controllers and variables stay the same)
   final TextEditingController kirNameController = TextEditingController();
   final TextEditingController phoneController = TextEditingController();
   final TextEditingController addressController = TextEditingController();
   final TextEditingController ageController = TextEditingController();
   final TextEditingController incomeController = TextEditingController();
+  
+  // Controllers untuk Dialog Ahli
+  final TextEditingController memberNameController = TextEditingController();
+  final TextEditingController memberAgeController = TextEditingController();
 
-  String selectedMukim = "Mukim A";
-  String selectedKampung = "Kampung 1";
   bool isLoading = false;
+  String selectedMukim = "Temin";
+  String selectedKampung = "Kampung Baru Jitra";
 
-  final List<String> mukimList = ["Mukim A", "Mukim B", "Mukim C"];
+  final List<String> mukimList = [
+    "Temin", "Tunjang", "Padang Perahu", "Sungai Laka", "Keplu",
+  ];
+
   final Map<String, List<String>> kampungByMukim = {
-    "Mukim A": ["Kampung 1", "Kampung 2"],
-    "Mukim B": ["Kampung 3", "Kampung 4"],
-    "Mukim C": ["Kampung 5"],
+    "Temin": ["Kampung Baru Jitra", "Kampung Teluk Malau", "Kampung Padang"],
+    "Tunjang": ["Kampung Tunjang", "Kampung Padang Lalang", "Kampung Pulau Ketam"],
+    "Padang Perahu": ["Kampung Padang Perahu", "Kampung Melele"],
+    "Sungai Laka": ["Kampung Gelung Chinchu", "Kampung Changkat Setol", "Bukit Kayu Hitam"],
+    "Keplu": ["Kampung Keplu", "Kampung Megat Dewa"],
   };
 
   Map<String, bool> bantuanList = {
-    "Zakat": false,
-    "Bantuan Kerajaan": false,
-    "NGO": false,
-    "Baitulmal": false,
+    "Zakat": false, "Bantuan Kerajaan": false, "NGO": false, "Baitulmal": false,
   };
 
   List<HouseholdMember> householdMembers = [];
-  final TextEditingController memberNameController = TextEditingController();
-  final TextEditingController memberAgeController = TextEditingController();
   String memberRelation = "Anak";
   String memberStatus = "Masih Belajar";
 
-  final List<String> relationOptions = ["Isteri", "Anak Kandung", "Anak Angkat", "Ibu Kandung", "Bapa Kandung", "Lain-lain"];
-  final List<String> statusOptions = ["Bekerja", "Masih Belajar", "Berkahwin", "Buruh", "Pesara"];
+  final List<String> relationOptions = ["Isteri", "Anak", "Ibu Kandung", "Bapa Kandung", "Lain-lain"];
+  final List<String> statusOptions = ["Bekerja", "Masih Belajar", "Suri Rumah", "Buruh", "Pesara"];
 
   @override
   void initState() {
@@ -58,20 +61,26 @@ class _AddResidentPageState extends State<AddResidentPage> {
       ageController.text = r.age.toString();
       phoneController.text = r.phone;
       addressController.text = r.address;
-      incomeController.text = r.incomeRange;
-      selectedMukim = r.mukim ?? "Mukim A";
-      selectedKampung = r.kampung ?? "Kampung 1";
+      incomeController.text = r.incomeRange ?? "< RM1,000";
+      selectedMukim = r.mukim ?? "Temin";
+      selectedKampung = r.kampung ?? "Kampung Baru Jitra";
+      
       if (r.bantuan != null) {
         for (var b in r.bantuan!) {
           if (bantuanList.containsKey(b)) bantuanList[b] = true;
         }
       }
       householdMembers = List.from(r.householdMembers);
+    } else {
+      incomeController.text = "< RM1,000";
     }
   }
 
   Future<void> _saveResident() async {
-    if (kirNameController.text.isEmpty) return;
+    if (kirNameController.text.isEmpty) {
+      _showError("Sila masukkan nama KIR");
+      return;
+    }
 
     setState(() => isLoading = true);
 
@@ -85,11 +94,10 @@ class _AddResidentPageState extends State<AddResidentPage> {
     try {
       final bool isEdit = widget.existingResident != null;
       
-      // Concatenate your MyConfig.myurl with the folder and filename
-      final String folderPath = "${MyConfig.myurl}dataresidents/";
-      final String url = isEdit 
-          ? "${folderPath}update_resident.php" 
-          : "${folderPath}register_resident.php";
+      // Pastikan MyConfig.myurl sudah mempunyai http:// di awal dan / di akhir
+      final String baseUrl = MyConfig.myurl.endsWith('/') ? MyConfig.myurl : "${MyConfig.myurl}/";
+      final String endpoint = isEdit ? "update_resident.php" : "register_resident.php";
+      final String url = "${baseUrl}dataresidents/$endpoint";
 
       final Map<String, String> body = {
         "name": kirNameController.text,
@@ -103,24 +111,24 @@ class _AddResidentPageState extends State<AddResidentPage> {
         "household": householdJson,
       };
 
-      if (isEdit) body["id"] = widget.existingResident!.id!;
+      if (isEdit) body["resident_id"] = widget.existingResident!.id!;
 
-      final response = await http.post(Uri.parse(url), body: body);
+      final response = await http.post(Uri.parse(url), body: body).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data['status'] == 'success') {
-          Navigator.pop(context, true); 
+          if (mounted) Navigator.pop(context, true); 
         } else {
-          _showError(data['message']);
+          _showError(data['message'] ?? "Gagal menyimpan data");
         }
       } else {
-        _showError("Server Error: ${response.statusCode}");
+        _showError("Ralat Pelayan: ${response.statusCode}");
       }
     } catch (e) {
-      _showError("Error connecting to server: $e");
+      _showError("Ralat Sambungan: Pastikan IP server betul. ($e)");
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
@@ -128,7 +136,6 @@ class _AddResidentPageState extends State<AddResidentPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  // ... (Rest of the dialog and build methods stay exactly as they were)
   void showAddMemberDialog({HouseholdMember? member, int? index}) {
     if (member != null) {
       memberNameController.text = member.name;
@@ -147,24 +154,26 @@ class _AddResidentPageState extends State<AddResidentPage> {
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
           title: Text(member == null ? "Tambah Ahli" : "Edit Ahli"),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(controller: memberNameController, decoration: const InputDecoration(labelText: "Nama")),
-              TextField(controller: memberAgeController, decoration: const InputDecoration(labelText: "Umur"), keyboardType: TextInputType.number),
-              DropdownButtonFormField<String>(
-                value: memberRelation,
-                items: relationOptions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
-                onChanged: (v) => setDialogState(() => memberRelation = v!),
-                decoration: const InputDecoration(labelText: "Hubungan"),
-              ),
-              DropdownButtonFormField<String>(
-                value: memberStatus,
-                items: statusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                onChanged: (v) => setDialogState(() => memberStatus = v!),
-                decoration: const InputDecoration(labelText: "Status"),
-              ),
-            ],
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(controller: memberNameController, decoration: const InputDecoration(labelText: "Nama")),
+                TextField(controller: memberAgeController, decoration: const InputDecoration(labelText: "Umur"), keyboardType: TextInputType.number),
+                DropdownButtonFormField<String>(
+                  value: memberRelation,
+                  items: relationOptions.map((r) => DropdownMenuItem(value: r, child: Text(r))).toList(),
+                  onChanged: (v) => setDialogState(() => memberRelation = v!),
+                  decoration: const InputDecoration(labelText: "Hubungan"),
+                ),
+                DropdownButtonFormField<String>(
+                  value: memberStatus,
+                  items: statusOptions.map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+                  onChanged: (v) => setDialogState(() => memberStatus = v!),
+                  decoration: const InputDecoration(labelText: "Status"),
+                ),
+              ],
+            ),
           ),
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text("Batal")),
@@ -199,6 +208,8 @@ class _AddResidentPageState extends State<AddResidentPage> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.existingResident == null ? "Tambah Penduduk" : "Edit Penduduk"),
+        backgroundColor: Colors.blueGrey,
+        foregroundColor: Colors.white,
       ),
       body: isLoading 
         ? const Center(child: CircularProgressIndicator())
@@ -232,7 +243,7 @@ class _AddResidentPageState extends State<AddResidentPage> {
                     decoration: const InputDecoration(labelText: "Kampung"),
                   ),
                   DropdownButtonFormField<String>(
-                    value: incomeController.text.isEmpty ? "< RM1,000" : (["< RM1,000", "RM1,001 – RM2,000", "> RM3,000"].contains(incomeController.text) ? incomeController.text : "< RM1,000"),
+                    value: incomeController.text,
                     items: ["< RM1,000", "RM1,001 – RM2,000", "> RM3,000"].map((i) => DropdownMenuItem(value: i, child: Text(i))).toList(),
                     onChanged: (v) => setState(() => incomeController.text = v!),
                     decoration: const InputDecoration(labelText: "Pendapatan Bulanan"),
@@ -263,7 +274,10 @@ class _AddResidentPageState extends State<AddResidentPage> {
           ),
           const SizedBox(height: 10),
           householdMembers.isEmpty
-              ? const Text("Tiada ahli isi rumah")
+              ? const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text("Tiada ahli isi rumah", style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey)),
+                )
               : Card(
                   child: ListView.builder(
                     shrinkWrap: true,
@@ -288,11 +302,14 @@ class _AddResidentPageState extends State<AddResidentPage> {
           const SizedBox(height: 24),
           SizedBox(
             width: double.infinity,
+            height: 50,
             child: ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.blueGrey, foregroundColor: Colors.white),
               onPressed: _saveResident,
               child: Text(widget.existingResident == null ? "Simpan Maklumat Penduduk" : "Kemaskini Maklumat"),
             ),
           ),
+          const SizedBox(height: 20),
         ]),
       ),
     );
