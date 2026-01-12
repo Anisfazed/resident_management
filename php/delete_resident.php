@@ -1,6 +1,5 @@
 <?php
 include_once("dbconnect.php");
-
 if (isset($_POST['resident_id'])) {
     $id = $_POST['resident_id'];
 
@@ -24,5 +23,4 @@ if (isset($_POST['resident_id'])) {
     } else {
         echo "failed";
     }
-}
 ?>
