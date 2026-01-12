@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'controller/main_controller.dart';
+import 'pages/splash_page.dart';
 
 void main() {
   runApp(const ResidentApp());
@@ -21,7 +22,7 @@ class ResidentApp extends StatelessWidget {
           foregroundColor: Colors.black,
         ),
       ),
-      home: const MainController(),
+      home: const SplashPage(),
     );
   }
 }
