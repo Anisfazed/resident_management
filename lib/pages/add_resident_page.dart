@@ -22,15 +22,20 @@ class _AddResidentPageState extends State<AddResidentPage> {
   final TextEditingController ageController = TextEditingController();
   final TextEditingController incomeController = TextEditingController();
 
-  String selectedMukim = "Mukim A";
-  String selectedKampung = "Kampung 1";
   bool isLoading = false;
+  String selectedMukim = "Temin";
+  String selectedKampung = "Kampung Baru Jitra";
 
-  final List<String> mukimList = ["Mukim A", "Mukim B", "Mukim C"];
+  final List<String> mukimList = [
+    "Temin", "Tunjang", "Padang Perahu", "Sungai Laka", "Keplu",
+  ];
+
   final Map<String, List<String>> kampungByMukim = {
-    "Mukim A": ["Kampung 1", "Kampung 2"],
-    "Mukim B": ["Kampung 3", "Kampung 4"],
-    "Mukim C": ["Kampung 5"],
+    "Temin": ["Kampung Baru Jitra", "Kampung Teluk Malau", "Kampung Padang"],
+    "Tunjang": ["Kampung Tunjang", "Kampung Padang Lalang", "Kampung Pulau Ketam"],
+    "Padang Perahu": ["Kampung Padang Perahu", "Kampung Melele"],
+    "Sungai Laka": ["Kampung Gelung Chinchu", "Kampung Changkat Setol", "Bukit Kayu Hitam"],
+    "Keplu": ["Kampung Keplu", "Kampung Megat Dewa"],
   };
 
   Map<String, bool> bantuanList = {
@@ -46,8 +51,8 @@ class _AddResidentPageState extends State<AddResidentPage> {
   String memberRelation = "Anak";
   String memberStatus = "Masih Belajar";
 
-  final List<String> relationOptions = ["Isteri", "Anak Kandung", "Anak Angkat", "Ibu Kandung", "Bapa Kandung", "Lain-lain"];
-  final List<String> statusOptions = ["Bekerja", "Masih Belajar", "Berkahwin", "Buruh", "Pesara"];
+  final List<String> relationOptions = ["Isteri", "Anak", "Ibu Kandung", "Bapa Kandung", "Lain-lain"];
+  final List<String> statusOptions = ["Bekerja","Tidak Bekerja", "Masih Belajar", "Suri Rumah", "Buruh", "Pesara"];
 
   @override
   void initState() {

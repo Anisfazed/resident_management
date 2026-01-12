@@ -1,6 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:printing/printing.dart'; 
 import '../models/resident_model.dart';
 import '../myconfig.dart';
 import 'add_resident_page.dart';
@@ -25,14 +28,13 @@ class _DashboardPageState extends State<DashboardPage> {
     _loadResidents();
   }
 
-  /// Fetches the list of residents from the PHP backend
+  // 1. MEMUAT DATA
   Future<void> _loadResidents() async {
+    if (!mounted) return;
     setState(() => isLoading = true);
     try {
-      // Ensure the filename load_residents.php matches your server file
-      final response = await http.get(
-        Uri.parse("${MyConfig.myurl}dataresidents/load_residents.php"),
-      );
+      final String url = "${MyConfig.myurl}/dataresidents/load_residents.php";
+      final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         var data = jsonDecode(response.body);
@@ -42,16 +44,63 @@ class _DashboardPageState extends State<DashboardPage> {
             residentList = list.map((json) => Resident.fromJson(json)).toList();
             filteredList = residentList;
           });
+        } else {
+          setState(() {
+            residentList = [];
+            filteredList = [];
+          });
         }
       }
     } catch (e) {
-      debugPrint("Error loading residents: $e");
+      debugPrint("Ralat memuat data: $e");
     } finally {
-      setState(() => isLoading = false);
+      if (mounted) setState(() => isLoading = false);
     }
   }
 
-  /// Filters the list based on search input
+  // 2. FUNGSI PADAM
+  Future<void> _deleteResident(String id) async {
+    final bool? confirm = await showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Sahkan Padam"),
+        content: const Text("Adakah anda pasti mahu memadam data ini?"),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("Batal")),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text("Padam", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        final response = await http.post(
+          Uri.parse("${MyConfig.myurl}/dataresidents/delete_resident.php"),
+          body: {"resident_id": id},
+        );
+        
+        if (response.statusCode == 200) {
+          setState(() {
+            residentList.removeWhere((resident) => resident.id.toString() == id);
+            filteredList.removeWhere((resident) => resident.id.toString() == id);
+          });
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Data berjaya dipadam"))
+            );
+          }
+        }
+      } catch (e) {
+        debugPrint("Ralat padam: $e");
+      }
+    }
+  }
+
+  // 3. FUNGSI CARIAN
   void _filterResidents(String query) {
     setState(() {
       searchQuery = query;
@@ -64,15 +113,67 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
-  /// Navigate to Add Page and refresh if data was saved
   void _goToAddResident() async {
     final result = await Navigator.push(
       context,
       MaterialPageRoute(builder: (context) => const AddResidentPage()),
     );
-
     if (result == true) {
       _loadResidents();
+    }
+  }
+
+  // 4. EKSPORT KE PDF
+  Future<void> _exportToPdf() async {
+    if (filteredList.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Tiada data untuk dieksport"))
+      );
+      return;
+    }
+
+    final pdf = pw.Document();
+    List<Resident> sortedList = List.from(filteredList);
+    sortedList.sort((a, b) => (a.mukim ?? "").compareTo(b.mukim ?? ""));
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        orientation: pw.PageOrientation.landscape,
+        margin: const pw.EdgeInsets.all(20),
+        build: (pw.Context context) {
+          return [
+            pw.Center(
+              child: pw.Text("LAPORAN PROFIL PENDUDUK KESELURUHAN", 
+                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))
+            ),
+            pw.SizedBox(height: 15),
+            pw.TableHelper.fromTextArray(
+              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10),
+              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+              cellStyle: const pw.TextStyle(fontSize: 9),
+              headers: ['Mukim', 'Kampung', 'Nama KIR', 'Telefon', 'Pendapatan', 'Bantuan'],
+              data: sortedList.map((r) => [
+                r.mukim ?? "-",
+                r.kampung ?? "-",
+                r.name,
+                r.phone,
+                r.incomeRange ?? "-",
+                r.bantuan?.join(", ") ?? "-"
+              ]).toList(),
+            ),
+          ];
+        },
+      ),
+    );
+
+    try {
+      await Printing.layoutPdf(
+        onLayout: (PdfPageFormat format) async => pdf.save(),
+        name: 'Laporan_Penduduk_${DateTime.now().millisecondsSinceEpoch}',
+      );
+    } catch (e) {
+      debugPrint("Ralat PDF: $e");
     }
   }
 
@@ -81,16 +182,22 @@ class _DashboardPageState extends State<DashboardPage> {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Dashboard Penduduk"),
+        backgroundColor: Colors.blueGrey,
+        foregroundColor: Colors.white,
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadResidents,
-          )
+            icon: const Icon(Icons.picture_as_pdf), 
+            tooltip: "Eksport PDF",
+            onPressed: _exportToPdf
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh), 
+            onPressed: _loadResidents
+          ),
         ],
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
             padding: const EdgeInsets.all(12.0),
             child: TextField(
@@ -98,16 +205,12 @@ class _DashboardPageState extends State<DashboardPage> {
               decoration: InputDecoration(
                 hintText: "Cari nama, telefon, atau mukim...",
                 prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                contentPadding: const EdgeInsets.symmetric(vertical: 0),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                 filled: true,
                 fillColor: Colors.white,
               ),
             ),
           ),
-          
           Expanded(
             child: isLoading
                 ? const Center(child: CircularProgressIndicator())
@@ -124,32 +227,40 @@ class _DashboardPageState extends State<DashboardPage> {
                               elevation: 2,
                               margin: const EdgeInsets.symmetric(vertical: 6),
                               child: ListTile(
+                                // ListTile tidak boleh ditekan secara keseluruhan
+                                onTap: null, 
                                 leading: CircleAvatar(
                                   backgroundColor: Colors.blueGrey,
                                   child: Text(
-                                    resident.name.isNotEmpty ? resident.name[0].toUpperCase() : "?",
-                                    style: const TextStyle(color: Colors.white),
+                                    resident.name.isNotEmpty ? resident.name[0].toUpperCase() : "?", 
+                                    style: const TextStyle(color: Colors.white)
                                   ),
                                 ),
-                                title: Text(
-                                  resident.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Text(
-                                  "KIR • ${resident.mukim ?? 'N/A'} • ${resident.phone}",
-                                ),
-                                trailing: const Icon(Icons.chevron_right),
-                                onTap: () async {
-                                  await Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ResidentDetailsPage(
-                                        residentData: resident,
-                                      ),
+                                title: Text(resident.name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text("KIR • ${resident.mukim ?? 'N/A'} • ${resident.phone}"),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // Butang Padam
+                                    IconButton(
+                                      icon: const Icon(Icons.delete, color: Colors.redAccent),
+                                      onPressed: () => _deleteResident(resident.id.toString()),
                                     ),
-                                  );
-                                  _loadResidents(); // Refresh when coming back
-                                },
+                                    // Butang Chevron untuk ke Details (Sahaja yang boleh klik)
+                                    IconButton(
+                                      icon: const Icon(Icons.chevron_right, color: Colors.grey),
+                                      onPressed: () async {
+                                        await Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => ResidentDetailsPage(residentData: resident)
+                                          ),
+                                        );
+                                        _loadResidents();
+                                      },
+                                    ),
+                                  ],
+                                ),
                               ),
                             );
                           },
@@ -174,17 +285,17 @@ class _DashboardPageState extends State<DashboardPage> {
           const Icon(Icons.people_outline, size: 80, color: Colors.grey),
           const SizedBox(height: 16),
           Text(
-            searchQuery.isEmpty 
-                ? "Tiada data penduduk ditemui" 
-                : "Tiada hasil untuk '$searchQuery'",
-            style: const TextStyle(fontSize: 16, color: Colors.grey),
+            searchQuery.isEmpty ? "Tiada data penduduk" : "Tiada hasil untuk '$searchQuery'", 
+            style: const TextStyle(color: Colors.grey)
           ),
-          const SizedBox(height: 10),
-          if (searchQuery.isEmpty)
-            ElevatedButton(
-              onPressed: _goToAddResident,
-              child: const Text("Tambah Sekarang"),
-            )
+          if (searchQuery.isEmpty) 
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: ElevatedButton(
+                onPressed: _goToAddResident, 
+                child: const Text("Tambah Sekarang")
+              ),
+            ),
         ],
       ),
     );
