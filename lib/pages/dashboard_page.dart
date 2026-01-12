@@ -22,13 +22,18 @@ class _DashboardPageState extends State<DashboardPage> {
   bool isLoading = true;
   String searchQuery = "";
 
+  // Warna Tema Rasmi (Navy & Gold)
+  final Color primaryBlue = const Color(0xFF0D47A1);
+  final Color navyBlue = const Color(0xFF1A237E);
+  final Color goldAccent = const Color(0xFFFFD700);
+
   @override
   void initState() {
     super.initState();
     _loadResidents();
   }
 
-  // 1. MEMUAT DATA
+  // 1. MEMUAT DATA DARI SERVER
   Future<void> _loadResidents() async {
     if (!mounted) return;
     setState(() => isLoading = true);
@@ -58,7 +63,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // 2. FUNGSI PADAM
+  // 2. FUNGSI PADAM REKOD
   Future<void> _deleteResident(String id) async {
     final bool? confirm = await showDialog(
       context: context,
@@ -87,7 +92,6 @@ class _DashboardPageState extends State<DashboardPage> {
             residentList.removeWhere((resident) => resident.id.toString() == id);
             filteredList.removeWhere((resident) => resident.id.toString() == id);
           });
-
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text("Data berjaya dipadam"))
@@ -113,22 +117,10 @@ class _DashboardPageState extends State<DashboardPage> {
     });
   }
 
-  void _goToAddResident() async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => const AddResidentPage()),
-    );
-    if (result == true) {
-      _loadResidents();
-    }
-  }
-
-  // 4. EKSPORT KE PDF
+  // 4. EKSPORT KE PDF (LANDSCAPE)
   Future<void> _exportToPdf() async {
     if (filteredList.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Tiada data untuk dieksport"))
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Tiada data untuk dieksport")));
       return;
     }
 
@@ -141,140 +133,173 @@ class _DashboardPageState extends State<DashboardPage> {
         pageFormat: PdfPageFormat.a4,
         orientation: pw.PageOrientation.landscape,
         margin: const pw.EdgeInsets.all(20),
-        build: (pw.Context context) {
-          return [
-            pw.Center(
-              child: pw.Text("LAPORAN PROFIL PENDUDUK KESELURUHAN", 
-                style: pw.TextStyle(fontSize: 16, fontWeight: pw.FontWeight.bold))
+        build: (pw.Context context) => [
+          pw.Header(
+            level: 0,
+            child: pw.Center(
+              child: pw.Text("LAPORAN PROFIL PENDUDUK DIGITAL", 
+                style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold))
             ),
-            pw.SizedBox(height: 15),
-            pw.TableHelper.fromTextArray(
-              headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10),
-              headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
-              cellStyle: const pw.TextStyle(fontSize: 9),
-              headers: ['Mukim', 'Kampung', 'Nama KIR', 'Telefon', 'Pendapatan', 'Bantuan'],
-              data: sortedList.map((r) => [
-                r.mukim ?? "-",
-                r.kampung ?? "-",
-                r.name,
-                r.phone,
-                r.incomeRange ?? "-",
-                r.bantuan?.join(", ") ?? "-"
-              ]).toList(),
-            ),
-          ];
-        },
+          ),
+          pw.SizedBox(height: 20),
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(color: PdfColors.white, fontWeight: pw.FontWeight.bold, fontSize: 10),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.blueGrey800),
+            cellStyle: const pw.TextStyle(fontSize: 9),
+            headers: ['Mukim', 'Kampung', 'Nama KIR', 'Telefon', 'Pendapatan', 'Bantuan'],
+            data: sortedList.map((r) => [
+              r.mukim ?? "-",
+              r.kampung ?? "-",
+              r.name.toUpperCase(),
+              r.phone,
+              r.incomeRange ?? "-",
+              r.bantuan?.join(", ") ?? "-"
+            ]).toList(),
+          ),
+        ],
       ),
     );
 
-    try {
-      await Printing.layoutPdf(
-        onLayout: (PdfPageFormat format) async => pdf.save(),
-        name: 'Laporan_Penduduk_${DateTime.now().millisecondsSinceEpoch}',
-      );
-    } catch (e) {
-      debugPrint("Ralat PDF: $e");
-    }
+    await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: const Text("Dashboard Penduduk"),
-        backgroundColor: Colors.blueGrey,
+        title: const Text("SISTEM PENDUDUK", style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.1)),
+        backgroundColor: navyBlue,
         foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.picture_as_pdf), 
-            tooltip: "Eksport PDF",
-            onPressed: _exportToPdf
-          ),
-          IconButton(
-            icon: const Icon(Icons.refresh), 
-            onPressed: _loadResidents
-          ),
+          IconButton(icon: const Icon(Icons.picture_as_pdf), onPressed: _exportToPdf),
+          IconButton(icon: const Icon(Icons.refresh), onPressed: _loadResidents),
         ],
       ),
       body: Column(
         children: [
+          // Header Statistik
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            decoration: BoxDecoration(
+              color: navyBlue,
+              borderRadius: const BorderRadius.only(
+                bottomLeft: Radius.circular(25),
+                bottomRight: Radius.circular(25),
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _buildHeaderStat("REKOD", filteredList.length.toString()),
+                _buildHeaderStat("MUKIM", _getUniqueMukimCount().toString()),
+              ],
+            ),
+          ),
+
+          // Search Bar
           Padding(
-            padding: const EdgeInsets.all(12.0),
+            padding: const EdgeInsets.all(16.0),
             child: TextField(
               onChanged: _filterResidents,
               decoration: InputDecoration(
                 hintText: "Cari nama, telefon, atau mukim...",
-                prefixIcon: const Icon(Icons.search),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                prefixIcon: Icon(Icons.search, color: primaryBlue),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none),
                 filled: true,
                 fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(vertical: 0),
               ),
             ),
           ),
+
+          // List Data
           Expanded(
             child: isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(child: CircularProgressIndicator(color: primaryBlue))
                 : filteredList.isEmpty
                     ? _buildEmptyState()
                     : RefreshIndicator(
                         onRefresh: _loadResidents,
                         child: ListView.builder(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           itemCount: filteredList.length,
                           itemBuilder: (context, index) {
                             final resident = filteredList[index];
-                            return Card(
-                              elevation: 2,
-                              margin: const EdgeInsets.symmetric(vertical: 6),
-                              child: ListTile(
-                                // ListTile tidak boleh ditekan secara keseluruhan
-                                onTap: null, 
-                                leading: CircleAvatar(
-                                  backgroundColor: Colors.blueGrey,
-                                  child: Text(
-                                    resident.name.isNotEmpty ? resident.name[0].toUpperCase() : "?", 
-                                    style: const TextStyle(color: Colors.white)
-                                  ),
-                                ),
-                                title: Text(resident.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text("KIR • ${resident.mukim ?? 'N/A'} • ${resident.phone}"),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Butang Padam
-                                    IconButton(
-                                      icon: const Icon(Icons.delete, color: Colors.redAccent),
-                                      onPressed: () => _deleteResident(resident.id.toString()),
-                                    ),
-                                    // Butang Chevron untuk ke Details (Sahaja yang boleh klik)
-                                    IconButton(
-                                      icon: const Icon(Icons.chevron_right, color: Colors.grey),
-                                      onPressed: () async {
-                                        await Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) => ResidentDetailsPage(residentData: resident)
-                                          ),
-                                        );
-                                        _loadResidents();
-                                      },
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
+                            return _buildResidentCard(resident);
                           },
                         ),
                       ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _goToAddResident,
-        backgroundColor: Colors.blueGrey,
-        child: const Icon(Icons.add, color: Colors.white),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () async {
+          final result = await Navigator.push(context, MaterialPageRoute(builder: (context) => const AddResidentPage()));
+          if (result == true) _loadResidents();
+        },
+        backgroundColor: primaryBlue,
+        icon: const Icon(Icons.add, color: Colors.white),
+        label: const Text("TAMBAH KIR", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
       ),
     );
+  }
+
+  // Widget Kad Penduduk yang telah direka semula
+  Widget _buildResidentCard(Resident resident) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+      ),
+      child: ListTile(
+        onTap: null, // Menutup fungsi klik pada keseluruhan kad
+        leading: CircleAvatar(
+          backgroundColor: primaryBlue.withOpacity(0.1),
+          child: Text(resident.name[0].toUpperCase(), style: TextStyle(color: primaryBlue, fontWeight: FontWeight.bold)),
+        ),
+        title: Text(resident.name.toUpperCase(), style: TextStyle(fontWeight: FontWeight.bold, color: navyBlue, fontSize: 14)),
+        subtitle: Text("${resident.mukim ?? 'N/A'} • ${resident.phone}", style: const TextStyle(fontSize: 12)),
+        trailing: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            IconButton(
+              icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+              onPressed: () => _deleteResident(resident.id.toString()),
+            ),
+            const SizedBox(width: 4),
+            // HANYA butang ini yang boleh ke details
+            IconButton(
+              icon: Icon(Icons.arrow_forward_ios_rounded, color: Colors.grey.shade400, size: 18),
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => ResidentDetailsPage(residentData: resident)),
+                );
+                _loadResidents();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeaderStat(String label, String value) {
+    return Column(
+      children: [
+        Text(value, style: TextStyle(color: goldAccent, fontSize: 22, fontWeight: FontWeight.bold)),
+        Text(label, style: const TextStyle(color: Colors.white70, fontSize: 10, letterSpacing: 1.2)),
+      ],
+    );
+  }
+
+  int _getUniqueMukimCount() {
+    return residentList.map((r) => r.mukim).toSet().length;
   }
 
   Widget _buildEmptyState() {
@@ -282,20 +307,9 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.people_outline, size: 80, color: Colors.grey),
+          Icon(Icons.folder_open, size: 80, color: Colors.grey.shade300),
           const SizedBox(height: 16),
-          Text(
-            searchQuery.isEmpty ? "Tiada data penduduk" : "Tiada hasil untuk '$searchQuery'", 
-            style: const TextStyle(color: Colors.grey)
-          ),
-          if (searchQuery.isEmpty) 
-            Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: ElevatedButton(
-                onPressed: _goToAddResident, 
-                child: const Text("Tambah Sekarang")
-              ),
-            ),
+          Text(searchQuery.isEmpty ? "Tiada rekod penduduk." : "Tiada hasil ditemukan.", style: const TextStyle(color: Colors.grey)),
         ],
       ),
     );
